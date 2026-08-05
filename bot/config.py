@@ -5,6 +5,11 @@ from config import MODEL
 import db
 
 
+# How long a multi-step flow waits on each reply before giving up. Generous, so
+# stepping away mid-setup doesn't discard what you've already entered.
+FLOW_TIMEOUT = 900
+
+
 # ─── helpers ─────────────────────────────────────────────────────────────────
 
 def _keep(response_text: str, current: str) -> str:
@@ -319,7 +324,7 @@ async def flow_add_chat(chat_id: int, edit_key: str = None) -> None:
     existing = db.read("chats").get(edit_key, {}) if edit_key else {}
     title    = "✏️ ویرایش چت" if edit_key else "➕ افزودن چت"
 
-    async with bot_client.conversation(chat_id, timeout=300, exclusive=False) as conv:
+    async with bot_client.conversation(chat_id, timeout=FLOW_TIMEOUT, exclusive=False) as conv:
         await conv.send_message(f"**{title}**")
 
         # Step 1: choose the chat (type or pick from list)
@@ -381,7 +386,7 @@ async def flow_edit_prompt(chat_id: int, prompt_id: str) -> None:
         await bot_client.send_message(chat_id, "❌ این پرامپت پیدا نشد.")
         return
 
-    async with bot_client.conversation(chat_id, timeout=300, exclusive=False) as conv:
+    async with bot_client.conversation(chat_id, timeout=FLOW_TIMEOUT, exclusive=False) as conv:
         curr_text = prompts[prompt_id].get("text", "")
         await conv.send_message(
             "✏️ **ویرایش پرامپت**\n\n"
