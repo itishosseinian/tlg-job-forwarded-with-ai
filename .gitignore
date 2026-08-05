@@ -1,0 +1,16 @@
+# secrets & login state — never commit these
+.env
+*.session
+*.session-journal
+
+# Claude Code local settings
+.claude/
+
+# per-user runtime data (chats, prompts, on/off state) — created at runtime
+data/*.json
+
+# python
+venv/
+__pycache__/
+*.pyc
+.DS_Store
