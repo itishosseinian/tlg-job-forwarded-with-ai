@@ -1,5 +1,6 @@
 import asyncio
 from telethon import events
+from telethon.tl.types import MessageMediaWebPage
 from openai import AsyncOpenAI
 from clients import user_client
 from config import OPENAI_API_KEY, MODEL
@@ -136,19 +137,31 @@ def register() -> None:
             f"🔗 {msg_link}"
         )
 
-        # ── forward + source info ─────────────────────────────────────────────
+        # ── deliver as ONE message: source header + the message text ──────────
         receiver = matched_cfg.get("receiver", "me")
-        try:
-            await user_client.forward_messages(receiver, event.message)
-        except Exception:
-            # Forwarding blocked — send message text manually instead
-            try:
-                await user_client.send_message(receiver, f"💬 {text}")
-            except Exception as exc:
-                print(f"[Send error] receiver={receiver} — {exc}")
-                return
+
+        # A link preview isn't real media — don't try to re-send it as a file.
+        media = event.message.media
+        if isinstance(media, MessageMediaWebPage):
+            media = None
+
+        # Telegram caps captions at 1024 chars and plain messages at 4096.
+        # Trim the message body, never the header, so the source is never lost.
+        room = max(0, (1024 if media else 4096) - len(source_info) - 2)
+        body = text if len(text) <= room else text[:max(0, room - 1)] + "…"
+        combined = f"{source_info}\n\n{body}"
 
         try:
-            await user_client.send_message(receiver, source_info)
+            if media:
+                await user_client.send_file(receiver, media, caption=combined)
+            else:
+                await user_client.send_message(receiver, combined, link_preview=False)
         except Exception as exc:
-            print(f"[Source info error] {exc}")
+            # Media re-send can fail on content-protected chats — text still gets through
+            if media:
+                try:
+                    await user_client.send_message(receiver, combined, link_preview=False)
+                    return
+                except Exception as exc2:
+                    exc = exc2
+            print(f"[Send error] receiver={receiver} — {exc}")
